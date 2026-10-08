@@ -38,10 +38,10 @@ interface TraceResponse {
 
 const MODES: Record<Mode, { label: string; placeholder: string; hint: string; sources: string; eta: string; examples: string[] }> = {
   username: {
-    label: 'Username / ID',
-    placeholder: 'vd: torvalds, @user hoặc link hồ sơ',
+    label: 'Username',
+    placeholder: 'vd: torvalds, @user',
     hint: 'Kiểm tra tài khoản có tồn tại trên 500 trang phổ biến bằng quy tắc nhận diện riêng của từng trang.',
-    sources: 'Maigret · 500 trang (GitHub, TikTok, Facebook, Reddit, Telegram, Twitch...)',
+    sources: 'Maigret · 500 trang',
     eta: '1–2 phút',
     examples: ['torvalds', 'gaearon'],
   },
@@ -49,23 +49,23 @@ const MODES: Record<Mode, { label: string; placeholder: string; hint: string; so
     label: 'Email',
     placeholder: 'vd: ten@gmail.com',
     hint: 'Kiểm tra email đã đăng ký trên trang nào. Không thể biết username trên trang đó vì trang không công khai.',
-    sources: 'holehe · 120+ trang · hồ sơ Gravatar công khai',
+    sources: 'holehe · 120+ trang',
     eta: '15–30 giây',
     examples: ['test@gmail.com'],
   },
   name: {
     label: 'Họ tên',
     placeholder: 'vd: Nguyễn Văn A',
-    hint: 'Họ tên không phải định danh duy nhất. Kết quả là ứng viên + liên kết tìm kiếm, cần tự xác minh.',
-    sources: 'GitHub user search · liên kết tìm người trên Facebook, LinkedIn, X, TikTok...',
+    hint: 'Kết quả là ứng viên + liên kết tìm kiếm, cần tự xác minh.',
+    sources: 'GitHub · Mạng xã hội',
     eta: 'vài giây',
     examples: ['Linus Torvalds'],
   },
   image: {
     label: 'Hình ảnh',
-    placeholder: 'hoặc dán URL ảnh: https://...',
-    hint: 'Đọc metadata (thiết bị, thời gian, GPS) và tìm ngược ảnh để xem trang nào đã đăng ảnh. Không nhận diện khuôn mặt.',
-    sources: 'EXIF · Google Lens · Yandex · Bing · TinEye',
+    placeholder: 'hoặc dán URL ảnh',
+    hint: 'Đọc metadata (thiết bị, thời gian, GPS) và tìm ngược ảnh để xem trang nào đã đăng ảnh.',
+    sources: 'EXIF · Yandex · Bing',
     eta: '5–15 giây',
     examples: [],
   },
@@ -150,8 +150,32 @@ function App() {
   const [filter, setFilter] = useState<Status | 'all'>('all')
   const [elapsed, setElapsed] = useState(0)
   const [apiOnline, setApiOnline] = useState<boolean | null>(null)
+  const [linkedinData, setLinkedinData] = useState<any>(null)
+  
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [onboardingStep, setOnboardingStep] = useState(0)
+
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Check Onboarding
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.get(['hasSeenOnboarding'], (res) => {
+        if (!res.hasSeenOnboarding) {
+          setShowOnboarding(true)
+        }
+      })
+    }
+  }, [])
+
+  const completeOnboarding = () => {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({ hasSeenOnboarding: true })
+    }
+    setShowOnboarding(false)
+  }
 
   // Backend health indicator
   useEffect(() => {
@@ -271,8 +295,6 @@ function App() {
     URL.revokeObjectURL(a.href)
   }
 
-  const [linkedinData, setLinkedinData] = useState<any>(null)
-
   const scrapeCurrentTab = () => {
     if (typeof chrome === 'undefined' || !chrome.tabs) return;
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -302,215 +324,264 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="header-section">
-        <div className="brand-group">
-          <div className="logo-container"><img src="/icon.png" alt="OmniTrace" className="logo-img" /></div>
-          <h1 className="brand-name">Omni<span className="brand-trace">Trace</span></h1>
-        </div>
-        <div className={`status-badge ${apiOnline === false ? 'offline' : ''}`} title={API}>
-          <span className="status-dot" />
-          {apiOnline === null ? 'Đang kiểm tra' : apiOnline ? 'Backend online' : 'Backend offline'}
-        </div>
-      </header>
-
-      <main className="content-section">
-        {phase === 'idle' && (
-          <>
-            <div className="search-tabs">
-              {(Object.keys(MODES) as Mode[]).map(m => (
-                <button key={m} className={`tab-btn ${mode === m ? 'active' : ''}`}
-                  onClick={() => { setMode(m); setQuery('') }}>
-                  {MODES[m].label}
-                </button>
-              ))}
+      {showOnboarding ? (
+        <div className="glass-panel onboarding-overlay">
+          {onboardingStep === 0 && (
+            <div className="onboarding-slide">
+              <div className="onboarding-icon">🔍</div>
+              <h2 className="onboarding-title">Chào mừng đến với OmniTrace</h2>
+              <p className="onboarding-text">Siêu công cụ OSINT & Lead Generation. Cào dữ liệu, xác thực, và xuất CRM chỉ trong chớp mắt.</p>
             </div>
-
-            {mode === 'image' && (
-              <div
-                className={`dropzone ${imagePreview ? 'has-image' : ''}`}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) pickFile(f) }}
-              >
-                {imagePreview ? (
-                  <>
-                    <img src={imagePreview} alt="preview" />
-                    <button className="dropzone-clear" onClick={e => { e.stopPropagation(); pickFile(null) }}>×</button>
-                  </>
-                ) : (
-                  <span>Kéo thả ảnh vào đây hoặc <b>bấm để chọn</b><br /><small>JPG, PNG, WEBP · tối đa 10MB</small></span>
-                )}
-                <input ref={fileInputRef} type="file" accept="image/*" hidden
-                  onChange={e => pickFile(e.target.files?.[0] ?? null)} />
-              </div>
-            )}
-
-            {!(mode === 'image' && imageFile) && (
-              <div className="input-wrapper">
-                <svg className="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                <input
-                  type={mode === 'email' ? 'email' : 'text'}
-                  className="custom-input"
-                  placeholder={cfg.placeholder}
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && runTrace()}
-                  autoFocus
-                />
-              </div>
-            )}
-
-            {cfg.examples.length > 0 && (
-              <div className="quick-chips">
-                <span className="chips-label">Thử:</span>
-                {cfg.examples.map(ex => <span key={ex} className="chip" onClick={() => setQuery(ex)}>{ex}</span>)}
-              </div>
-            )}
-
-            <div className="info-card">
-              <p className="info-hint">{cfg.hint}</p>
-              <div className="info-row"><span>Nguồn dữ liệu</span><b>{cfg.sources}</b></div>
-              <div className="info-row"><span>Thời gian dự kiến</span><b>{cfg.eta}</b></div>
+          )}
+          {onboardingStep === 1 && (
+            <div className="onboarding-slide">
+              <div className="onboarding-icon">🌐</div>
+              <h2 className="onboarding-title">OSINT Đa Nền Tảng</h2>
+              <p className="onboarding-text">Tìm kiếm dấu vết kỹ thuật số trên 500+ mạng xã hội chỉ với username, email hoặc hình ảnh.</p>
             </div>
-
-            <button className="btn-primary" disabled={!canSubmit || apiOnline === false} onClick={runTrace}>
-              Bắt đầu truy vết
-            </button>
-
-            {typeof chrome !== 'undefined' && chrome.tabs && (
-              <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <button className="btn-secondary" onClick={scrapeCurrentTab}>
-                  Lấy dữ liệu từ tab LinkedIn hiện tại
-                </button>
-                {linkedinData && (
-                  <div className="info-card" style={{ marginTop: '0' }}>
-                    <div className="info-row">
-                      <span>Trạng thái</span>
-                      <b>
-                        {linkedinData.type === 'profile' 
-                          ? `Đã lấy: ${linkedinData.name || 'Không rõ tên'} ${linkedinData.company ? `- ${linkedinData.company}` : ''}`
-                          : linkedinData.type === 'search'
-                            ? `Đã lấy danh sách tìm kiếm (${linkedinData.profiles?.length || 0} kết quả)`
-                            : 'Không tìm thấy dữ liệu LinkedIn'}
-                      </b>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {phase === 'scanning' && (
-          <div className="scan-view">
-            <div className="scan-header">
-              <div className="spinner" />
-              <div>
-                <div className="scan-title">Đang truy vết <b>{mode === 'image' ? (imageFile?.name ?? 'ảnh') : query}</b></div>
-                <div className="scan-sub">{elapsed}s · dự kiến {cfg.eta}</div>
-              </div>
+          )}
+          {onboardingStep === 2 && (
+            <div className="onboarding-slide">
+              <div className="onboarding-icon">💼</div>
+              <h2 className="onboarding-title">LinkedIn Scraper</h2>
+              <p className="onboarding-text">Trích xuất tự động hồ sơ hoặc danh sách kết quả tìm kiếm trên LinkedIn trực tiếp từ tab bạn đang mở.</p>
             </div>
-            <ol className="scan-steps">
-              {steps.map((s, i) => (
-                <li key={s} className={i < activeStep ? 'done' : i === activeStep ? 'active' : ''}>{s}</li>
-              ))}
-            </ol>
-            <button className="btn-secondary" onClick={() => abortRef.current?.abort()}>Huỷ</button>
+          )}
+          {onboardingStep === 3 && (
+            <div className="onboarding-slide">
+              <div className="onboarding-icon">📧</div>
+              <h2 className="onboarding-title">Đoán & Check Email</h2>
+              <p className="onboarding-text">Thuật toán tự động sinh email công việc và ping SMTP để xác thực độ chính xác 100%.</p>
+            </div>
+          )}
+          
+          <div className="onboarding-dots">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className={`dot ${i === onboardingStep ? 'active' : ''}`} />
+            ))}
           </div>
-        )}
 
-        {phase === 'error' && (
-          <div className="error-view">
-            <div className="error-icon">!</div>
-            <p>{error}</p>
-            <button className="btn-secondary" onClick={reset}>Quay lại</button>
-          </div>
-        )}
-
-        {phase === 'results' && data && (
-          <>
-            <div className="result-overview">
-              <div className="res-target" title={data.query}>{data.query}</div>
-              <div className="stats-row">
-                <span><b>{data.stats.checked}</b> nguồn đã kiểm tra</span>
-                <span><b>{data.stats.found}</b> kết quả</span>
-                <span><b>{data.stats.duration}s</b></span>
-              </div>
+          <button 
+            className="btn-primary" 
+            onClick={() => onboardingStep < 3 ? setOnboardingStep(onboardingStep + 1) : completeOnboarding()}
+          >
+            {onboardingStep < 3 ? 'Tiếp tục' : 'Bắt đầu sử dụng'}
+          </button>
+        </div>
+      ) : (
+        <>
+          <header className="header-section">
+            <div className="brand-group">
+              <div className="logo-container"><img src="/icon.png" alt="OmniTrace" className="logo-img" /></div>
+              <h1 className="brand-name">Omni<span className="brand-trace">Trace</span></h1>
             </div>
+            <div className={`status-badge ${apiOnline === false ? 'offline' : ''}`} title={API}>
+              <span className="status-dot" />
+              {apiOnline === null ? 'Đang kiểm tra' : apiOnline ? 'Server Online' : 'Server Offline'}
+            </div>
+          </header>
 
-            {data.profile && (
-              <div className="profile-card">
-                {data.profile.avatar && <img src={data.profile.avatar} alt="" className="profile-avatar" />}
-                <div className="profile-info">
-                  {data.profile.name && <div className="profile-name">{data.profile.name}</div>}
-                  {data.profile.location && <div className="profile-meta">📍 {data.profile.location}</div>}
-                  {data.profile.bio && <div className="profile-bio">{data.profile.bio}</div>}
-                  {data.profile.source && <div className="profile-source">Nguồn: {data.profile.source}</div>}
-                </div>
-              </div>
-            )}
-
-            {data.metadata && Object.keys(data.metadata).length > 0 && (
-              <div className="meta-card">
-                <div className="section-title">Metadata ảnh</div>
-                <dl className="res-details">
-                  {Object.entries(data.metadata).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
-                </dl>
-              </div>
-            )}
-
-            {data.warnings.length > 0 && (
-              <div className="warning-box">
-                {data.warnings.map(w => <div key={w}>⚠ {w}</div>)}
-              </div>
-            )}
-
-            {data.results.length === 0 ? (
-              <div className="empty-state">
-                <p>Không tìm thấy tài khoản nào.</p>
-                <small>Đã kiểm tra {data.stats.checked} nguồn, không có kết quả trùng khớp.</small>
-              </div>
-            ) : (
+          <main className="content-section">
+            {phase === 'idle' && (
               <>
-                <div className="filter-row">
-                  <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Tất cả {counts.all}</button>
-                  {STATUS_ORDER.filter(s => counts[s] > 0).map(s => (
-                    <button key={s} className={`filter-chip chip-${s} ${filter === s ? 'active' : ''}`} onClick={() => setFilter(s)}>
-                      {STATUS_META[s].label} {counts[s]}
+                <div className="search-tabs">
+                  {(Object.keys(MODES) as Mode[]).map(m => (
+                    <button key={m} className={`tab-btn ${mode === m ? 'active' : ''}`}
+                      onClick={() => { setMode(m); setQuery('') }}>
+                      {MODES[m].label}
                     </button>
                   ))}
                 </div>
 
-                {STATUS_ORDER.filter(s => (filter === 'all' || filter === s) && counts[s] > 0).map(s => (
-                  <section key={s} className="result-section">
-                    <div className="section-title">
-                      {STATUS_META[s].section} <span>· {STATUS_META[s].desc}</span>
-                    </div>
-                    <div className="result-list">
-                      {data.results.filter(r => r.status === s).map((r, i) => <ResultItem key={`${r.platform}-${i}`} r={r} />)}
-                    </div>
-                  </section>
-                ))}
+                {mode === 'image' && (
+                  <div
+                    className={`dropzone ${imagePreview ? 'has-image' : ''}`}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) pickFile(f) }}
+                  >
+                    {imagePreview ? (
+                      <>
+                        <img src={imagePreview} alt="preview" />
+                        <button className="dropzone-clear" onClick={e => { e.stopPropagation(); pickFile(null) }}>×</button>
+                      </>
+                    ) : (
+                      <span>Kéo thả ảnh vào đây hoặc <b>bấm để chọn</b><br /><small>JPG, PNG, WEBP · tối đa 10MB</small></span>
+                    )}
+                    <input ref={fileInputRef} type="file" accept="image/*" hidden
+                      onChange={e => pickFile(e.target.files?.[0] ?? null)} />
+                  </div>
+                )}
 
-                {data.type === 'username' && counts.confirmed > 0 && (
-                  <p className="disclaimer">Cùng username trên nhiều trang không chắc chắn là cùng một người.</p>
+                {!(mode === 'image' && imageFile) && (
+                  <div className="input-wrapper">
+                    <svg className="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    <input
+                      type={mode === 'email' ? 'email' : 'text'}
+                      className="custom-input"
+                      placeholder={cfg.placeholder}
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && runTrace()}
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {cfg.examples.length > 0 && (
+                  <div className="quick-chips">
+                    <span className="chips-label">Thử:</span>
+                    {cfg.examples.map(ex => <span key={ex} className="chip" onClick={() => setQuery(ex)}>{ex}</span>)}
+                  </div>
+                )}
+
+                <div className="glass-panel info-card">
+                  <p className="info-hint">{cfg.hint}</p>
+                  <div className="info-row"><span>Nguồn dữ liệu</span><b>{cfg.sources}</b></div>
+                  <div className="info-row"><span>Thời gian dự kiến</span><b>{cfg.eta}</b></div>
+                </div>
+
+                <button className="btn-primary" disabled={!canSubmit || apiOnline === false} onClick={runTrace}>
+                  Bắt đầu truy vết
+                </button>
+
+                {typeof chrome !== 'undefined' && chrome.tabs && (
+                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <button className="btn-secondary" onClick={scrapeCurrentTab}>
+                      ⚡ Lấy dữ liệu từ tab LinkedIn hiện tại
+                    </button>
+                    {linkedinData && (
+                      <div className="glass-panel" style={{ padding: '12px', fontSize: '13px' }}>
+                        <div className="info-row" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+                          <span>Trạng thái</span>
+                          <b style={{ color: 'var(--success)' }}>
+                            {linkedinData.type === 'profile' 
+                              ? `Đã lấy: ${linkedinData.name || 'Không rõ tên'} ${linkedinData.company ? `- ${linkedinData.company}` : ''}`
+                              : linkedinData.type === 'search'
+                                ? `Đã lấy danh sách (${linkedinData.profiles?.length || 0} kết quả)`
+                                : 'Không tìm thấy dữ liệu'}
+                          </b>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </>
             )}
 
-            <div className="result-actions">
-              <button className="btn-secondary" onClick={reset}>Truy vết mới</button>
-              <button className="btn-secondary" onClick={exportJson}>Xuất JSON</button>
-              <button className="btn-secondary" onClick={exportCsv}>Xuất CSV</button>
-            </div>
-          </>
-        )}
-      </main>
+            {phase === 'scanning' && (
+              <div className="scan-view">
+                <div className="scan-header">
+                  <div className="spinner" />
+                  <div>
+                    <div className="scan-title">Đang truy vết <b>{mode === 'image' ? (imageFile?.name ?? 'ảnh') : query}</b></div>
+                    <div className="scan-sub">{elapsed}s · dự kiến {cfg.eta}</div>
+                  </div>
+                </div>
+                <ol className="scan-steps">
+                  {steps.map((s, i) => (
+                    <li key={s} className={i < activeStep ? 'done' : i === activeStep ? 'active' : ''}>{s}</li>
+                  ))}
+                </ol>
+                <div style={{ marginTop: 'auto' }}>
+                  <button className="btn-secondary" style={{ width: '100%' }} onClick={() => abortRef.current?.abort()}>Huỷ</button>
+                </div>
+              </div>
+            )}
 
-      <footer className="footer">
-        <span className="version">OmniTrace v2.0</span>
-        <span className="version">Chỉ dùng cho mục đích hợp pháp</span>
-      </footer>
+            {phase === 'error' && (
+              <div className="error-view">
+                <div className="error-icon">!</div>
+                <p>{error}</p>
+                <button className="btn-secondary" style={{ width: '100%' }} onClick={reset}>Quay lại</button>
+              </div>
+            )}
+
+            {phase === 'results' && data && (
+              <>
+                <div className="result-overview glass-panel">
+                  <div className="res-target" title={data.query}>{data.query}</div>
+                  <div className="stats-row">
+                    <span><b>{data.stats.checked}</b> nguồn</span>
+                    <span><b>{data.stats.found}</b> kết quả</span>
+                    <span><b>{data.stats.duration}s</b></span>
+                  </div>
+                </div>
+
+                {data.profile && (
+                  <div className="profile-card glass-panel">
+                    {data.profile.avatar && <img src={data.profile.avatar} alt="" className="profile-avatar" />}
+                    <div className="profile-info">
+                      {data.profile.name && <div className="profile-name">{data.profile.name}</div>}
+                      {data.profile.location && <div className="profile-meta">📍 {data.profile.location}</div>}
+                      {data.profile.bio && <div className="profile-bio">{data.profile.bio}</div>}
+                    </div>
+                  </div>
+                )}
+
+                {data.metadata && Object.keys(data.metadata).length > 0 && (
+                  <div className="meta-card">
+                    <div className="section-title">Metadata ảnh</div>
+                    <dl className="res-details glass-panel">
+                      {Object.entries(data.metadata).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+                    </dl>
+                  </div>
+                )}
+
+                {data.warnings.length > 0 && (
+                  <div className="warning-box glass-panel">
+                    {data.warnings.map(w => <div key={w}>⚠ {w}</div>)}
+                  </div>
+                )}
+
+                {data.results.length === 0 ? (
+                  <div className="empty-state">
+                    <p>Không tìm thấy tài khoản nào.</p>
+                    <small>Đã kiểm tra {data.stats.checked} nguồn, không có kết quả trùng khớp.</small>
+                  </div>
+                ) : (
+                  <>
+                    <div className="filter-row">
+                      <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Tất cả {counts.all}</button>
+                      {STATUS_ORDER.filter(s => counts[s] > 0).map(s => (
+                        <button key={s} className={`filter-chip chip-${s} ${filter === s ? 'active' : ''}`} onClick={() => setFilter(s)}>
+                          {STATUS_META[s].label} {counts[s]}
+                        </button>
+                      ))}
+                    </div>
+
+                    {STATUS_ORDER.filter(s => (filter === 'all' || filter === s) && counts[s] > 0).map(s => (
+                      <section key={s} className="result-section">
+                        <div className="section-title">
+                          {STATUS_META[s].section} <span>· {STATUS_META[s].desc}</span>
+                        </div>
+                        <div className="result-list">
+                          {data.results.filter(r => r.status === s).map((r, i) => <ResultItem key={`${r.platform}-${i}`} r={r} />)}
+                        </div>
+                      </section>
+                    ))}
+
+                    {data.type === 'username' && counts.confirmed > 0 && (
+                      <p className="disclaimer">Cùng username trên nhiều trang không chắc chắn là cùng một người.</p>
+                    )}
+                  </>
+                )}
+
+                <div className="result-actions">
+                  <button className="btn-secondary" onClick={reset}>Mới</button>
+                  <button className="btn-secondary" onClick={exportJson}>JSON</button>
+                  <button className="btn-secondary" onClick={exportCsv}>CSV</button>
+                </div>
+              </>
+            )}
+          </main>
+
+          <footer className="footer">
+            <span className="version">OmniTrace v2.0 - Glassmorphism UI</span>
+            <span className="version">Chỉ dùng hợp pháp</span>
+          </footer>
+        </>
+      )}
     </div>
   )
 }
