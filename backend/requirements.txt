@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+httpx
+pydantic
+python-multipart
+pillow
+holehe
+trio
+maigret
+dnspython

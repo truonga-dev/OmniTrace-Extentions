@@ -1,0 +1,9 @@
+/* Clear default Vite styles to prevent conflicts */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
